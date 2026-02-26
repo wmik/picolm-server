@@ -1,0 +1,23 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  api_key: ""
+
+picolm:
+  binary: "/usr/local/bin/picolm"
+  model_path: "/models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+  timeout_seconds: 300
+  max_tokens: 256
+  threads: 4
+  temperature: 0.7
+  top_p: 0.9
+  context_length: 2048
+  cache_dir: "/tmp/picolm-cache"
+
+logging:
+  level: "info"        # debug, info, warn, error
+  format: "text"       # json, text
+  output: "stdout"     # stdout, file
+  file_path: "logs/server.log"
+  log_requests: true
+  log_responses: false

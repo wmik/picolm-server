@@ -1,0 +1,24 @@
+# Binaries
+picolm-server
+*.exe
+
+# Config (local overrides)
+config.yaml
+
+# Session artifacts
+session-ses_*.md
+
+# Go
+vendor/
+*.test
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
