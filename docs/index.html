@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PicoLM Server — Ultra-Lightweight LLM Inference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fragment+Mono:ital@0;1&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060810;
+    --surface: #0d1117;
+    --surface2: #161b22;
+    --border: #21262d;
+    --text: #e6edf3;
+    --text-muted: #6e7681;
+    --text-subtle: #8b949e;
+    --accent: #00d4ff;
+    --accent2: #7c3aed;
+    --accent3: #10b981;
+    --glow: rgba(0,212,255,0.15);
+    --glow2: rgba(124,58,237,0.12);
+    --font-mono: 'Fragment Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
+  [data-theme="light"] {
+    --bg: #f0f4f8;
+    --surface: #ffffff;
+    --surface2: #e8edf2;
+    --border: #d0d7de;
+    --text: #0d1117;
+    --text-muted: #57606a;
+    --text-subtle: #6e7781;
+    --glow: rgba(0,212,255,0.08);
+    --glow2: rgba(124,58,237,0.06);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-display);
+    line-height: 1.6;
+    overflow-x: hidden;
+    transition: background 0.4s, color 0.4s;
+  }
+
+  /* ── NOISE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.4;
+  }
+
+  /* ── GRID BACKGROUND ── */
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 60px 60px;
+    opacity: 0.3;
+    pointer-events: none;
+  }
+  [data-theme="light"] .grid-bg { opacity: 0.15; }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 0 2rem;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    border-bottom: 1px solid var(--border);
+    transition: background 0.4s;
+  }
+  .nav-logo {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    color: var(--accent);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .nav-logo span { color: var(--text-muted); }
+  .nav-right { display: flex; align-items: center; gap: 1.5rem; }
+  .nav-link {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-subtle);
+    text-decoration: none;
+    transition: color 0.2s;
+    letter-spacing: 0.05em;
+  }
+  .nav-link:hover { color: var(--accent); }
+
+  .theme-toggle {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-subtle);
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    transition: all 0.2s;
+  }
+  .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 8rem 2rem 4rem;
+    position: relative;
+  }
+
+  .hero-glow {
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 400px;
+    background: radial-gradient(ellipse at center, var(--glow) 0%, transparent 70%);
+    pointer-events: none;
+    animation: pulseGlow 4s ease-in-out infinite;
+  }
+  .hero-glow2 {
+    position: absolute;
+    top: 40%;
+    left: 30%;
+    width: 400px;
+    height: 300px;
+    background: radial-gradient(ellipse at center, var(--glow2) 0%, transparent 70%);
+    pointer-events: none;
+    animation: pulseGlow 6s ease-in-out infinite reverse;
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+    50% { opacity: 1; transform: translateX(-50%) scale(1.1); }
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 1rem;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius: 100px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--accent);
+    margin-bottom: 2rem;
+    animation: fadeSlideDown 0.8s ease both;
+  }
+  .badge-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--accent3);
+    border-radius: 50%;
+    animation: blink 2s ease-in-out infinite;
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  .hero-title {
+    font-size: clamp(3.5rem, 10vw, 8rem);
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin-bottom: 1.5rem;
+    animation: fadeSlideDown 0.9s ease 0.1s both;
+  }
+  .hero-title .line1 { display: block; }
+  .hero-title .line2 {
+    display: block;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-sub {
+    font-size: clamp(1rem, 2vw, 1.25rem);
+    color: var(--text-subtle);
+    max-width: 560px;
+    margin: 0 auto 3rem;
+    font-weight: 400;
+    animation: fadeSlideDown 1s ease 0.2s both;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    animation: fadeSlideDown 1.1s ease 0.3s both;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.85rem 2rem;
+    border-radius: 10px;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+    transition: all 0.25s;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+    box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 60px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-2px);
+  }
+
+  @keyframes fadeSlideDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── METRICS STRIP ── */
+  .metrics {
+    display: flex;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    animation: fadeSlideDown 1.2s ease 0.5s both;
+  }
+  .metric {
+    padding: 2rem 3rem;
+    text-align: center;
+    border-right: 1px solid var(--border);
+    flex: 1;
+    min-width: 140px;
+  }
+  .metric:last-child { border-right: none; }
+  .metric-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+  .metric-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* ── SECTION ── */
+  section {
+    padding: 6rem 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .section-label::before {
+    content: '';
+    display: block;
+    width: 24px;
+    height: 1px;
+    background: var(--accent);
+  }
+  .section-title {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    margin-bottom: 1.5rem;
+  }
+  .section-desc {
+    font-size: 1.1rem;
+    color: var(--text-subtle);
+    max-width: 560px;
+    margin-bottom: 3rem;
+  }
+
+  /* ── FEATURES GRID ── */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .feature-card {
+    background: var(--surface);
+    padding: 2.5rem;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.3s;
+  }
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .feature-card:hover { background: var(--surface2); }
+  .feature-card:hover::before { opacity: 1; }
+
+  .feature-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    margin-bottom: 1.5rem;
+  }
+  .feature-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+  .feature-desc {
+    font-size: 0.9rem;
+    color: var(--text-subtle);
+    line-height: 1.7;
+  }
+
+  /* ── CODE SECTION ── */
+  .code-section {
+    padding: 6rem 2rem;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .code-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 5rem;
+    align-items: center;
+  }
+  @media (max-width: 768px) {
+    .code-inner { grid-template-columns: 1fr; gap: 2rem; }
+  }
+
+  .code-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0;
+  }
+  .code-tab {
+    padding: 0.6rem 1.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    user-select: none;
+    letter-spacing: 0.02em;
+  }
+  .code-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .code-tab:hover { color: var(--text); }
+
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    overflow: hidden;
+    position: relative;
+  }
+  .code-block pre {
+    padding: 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.8;
+    overflow-x: auto;
+    color: var(--text);
+  }
+  .code-panel { display: none; }
+  .code-panel.active { display: block; }
+
+  /* syntax colors */
+  .kw { color: #ff79c6; }
+  .str { color: var(--accent3); }
+  .cmt { color: var(--text-muted); font-style: italic; }
+  .fn { color: var(--accent); }
+  .num { color: #bd93f9; }
+  .var { color: #f1fa8c; }
+  .prop { color: #8be9fd; }
+
+  .copy-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── COMPAT SECTION ── */
+  .compat-section { padding: 6rem 2rem; }
+  .compat-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .compat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-top: 3rem;
+  }
+  .compat-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.25s;
+    cursor: default;
+  }
+  .compat-item:hover {
+    border-color: var(--accent);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px var(--glow);
+  }
+  .compat-icon { font-size: 2rem; margin-bottom: 0.5rem; display: block; }
+  .compat-name {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--text-subtle);
+  }
+
+  /* ── QUICK START ── */
+  .quickstart-section {
+    padding: 6rem 2rem;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .quickstart-inner { max-width: 900px; margin: 0 auto; }
+  .steps { display: flex; flex-direction: column; gap: 1.5rem; margin-top: 3rem; }
+  .step {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    opacity: 0;
+    transform: translateX(-20px);
+    transition: all 0.5s;
+  }
+  .step.visible { opacity: 1; transform: translateX(0); }
+  .step-num {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.1rem;
+  }
+  .step-content h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.4rem; }
+  .step-content p { font-size: 0.9rem; color: var(--text-subtle); margin-bottom: 0.75rem; }
+  .inline-code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--accent3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .inline-copy {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+    flex-shrink: 0;
+  }
+  .inline-copy:hover { color: var(--accent); }
+
+  /* ── PLATFORMS ── */
+  .platforms {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 3rem;
+  }
+  .platform-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.85rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-subtle);
+  }
+  .platform-badge span { font-size: 1rem; }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 3rem 2rem;
+    text-align: center;
+  }
+  .footer-inner { max-width: 1200px; margin: 0 auto; }
+  .footer-logo {
+    font-family: var(--font-mono);
+    font-size: 1.2rem;
+    color: var(--accent);
+    margin-bottom: 1rem;
+  }
+  .footer-links {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin-bottom: 2rem;
+  }
+  .footer-link {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-link:hover { color: var(--accent); }
+  .footer-copy {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  /* ── SCROLL ANIMATIONS ── */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── TERMINAL BLINK ── */
+  .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: var(--accent);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .metric { padding: 1.5rem; }
+    .metric-value { font-size: 1.8rem; }
+    nav { padding: 0 1rem; }
+    .nav-link { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo">picolm-server</a>
+  <div class="nav-right">
+    <a href="#features" class="nav-link">features</a>
+    <a href="#quickstart" class="nav-link">quick start</a>
+    <a href="#api" class="nav-link">api</a>
+    <a href="https://github.com/wmik/picolm-server" class="nav-link" target="_blank">github</a>
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-glow2"></div>
+
+  <div class="hero-badge">
+    <span class="badge-dot"></span>
+    OpenAI-Compatible · MIT License · Go 1.21+
+  </div>
+
+  <h1 class="hero-title">
+    <span class="line1">Local LLM.</span>
+    <span class="line2">Zero Friction.</span>
+  </h1>
+
+  <p class="hero-sub">
+    An ultra-lightweight HTTP server that brings PicoLM inference to your stack with full OpenAI API compatibility — no cloud required.
+  </p>
+
+  <div class="hero-actions">
+    <a href="#quickstart" class="btn btn-primary">
+      ⚡ Get Started
+    </a>
+    <a href="https://github.com/wmik/picolm-server" class="btn btn-secondary" target="_blank">
+      ⭐ View on GitHub
+    </a>
+  </div>
+</div>
+
+<!-- METRICS -->
+<div class="metrics">
+  <div class="metric">
+    <div class="metric-value">~8MB</div>
+    <div class="metric-label">Binary Size</div>
+  </div>
+  <div class="metric">
+    <div class="metric-value">~45MB</div>
+    <div class="metric-label">RAM Usage</div>
+  </div>
+  <div class="metric">
+    <div class="metric-value">&lt;1s</div>
+    <div class="metric-label">Startup Time</div>
+  </div>
+  <div class="metric">
+    <div class="metric-value">100%</div>
+    <div class="metric-label">OpenAI Compat</div>
+  </div>
+  <div class="metric">
+    <div class="metric-value">MIT</div>
+    <div class="metric-label">License</div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-label">Features</div>
+  <h2 class="section-title fade-in">Everything you need,<br>nothing you don't.</h2>
+  <p class="section-desc fade-in">PicoLM Server gives you a production-ready inference API without the bloat. Drop-in replace OpenAI with one config line.</p>
+
+  <div class="features-grid fade-in">
+    <div class="feature-card">
+      <div class="feature-icon">🔌</div>
+      <div class="feature-title">OpenAI-Compatible API</div>
+      <div class="feature-desc">Works with any existing OpenAI SDK. Switch from cloud to local inference by changing one URL. Zero code changes required in your apps.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <div class="feature-title">Real-Time Streaming</div>
+      <div class="feature-desc">Token-by-token streaming via Server-Sent Events (SSE). Get instant feedback with the same streaming UX users expect from premium services.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🛠️</div>
+      <div class="feature-title">Tool Calling</div>
+      <div class="feature-desc">Full function calling support for building AI agents. Define tools in your requests and let the model decide when and how to use them.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🪶</div>
+      <div class="feature-title">Ultra-Lightweight</div>
+      <div class="feature-desc">An ~8MB binary with ~45MB RAM footprint. Designed to run anywhere — from Raspberry Pi to production servers — without breaking a sweat.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌍</div>
+      <div class="feature-title">Cross-Platform</div>
+      <div class="feature-desc">Runs natively on Linux, macOS, Windows, and ARM devices. Single binary deployment with Docker support for containerized workloads.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <div class="feature-title">Local & Private</div>
+      <div class="feature-desc">Your data never leaves your machine. Run fully offline with any GGUF model. Optional API key auth when you need access control.</div>
+    </div>
+  </div>
+</section>
+
+<!-- CODE API SECTION -->
+<div class="code-section" id="api">
+  <div class="code-inner">
+    <div>
+      <div class="section-label">Integration</div>
+      <h2 class="section-title fade-in">One line<br>to switch.</h2>
+      <p class="section-desc fade-in">Change your base URL. That's it. PicoLM Server speaks fluent OpenAI so your existing code just works.</p>
+
+      <div class="platforms">
+        <div class="platform-badge"><span>🐍</span> Python</div>
+        <div class="platform-badge"><span>🟨</span> Node.js</div>
+        <div class="platform-badge"><span>🐹</span> Go</div>
+        <div class="platform-badge"><span>🐚</span> cURL</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="code-tabs">
+        <div class="code-tab active" onclick="switchTab('python', this)">python</div>
+        <div class="code-tab" onclick="switchTab('node', this)">node.js</div>
+        <div class="code-tab" onclick="switchTab('go', this)">go</div>
+        <div class="code-tab" onclick="switchTab('curl', this)">curl</div>
+      </div>
+      <div class="code-block">
+        <div class="code-panel active" id="tab-python">
+          <button class="copy-btn" onclick="copyCode('python')">copy</button>
+          <pre><span class="kw">from</span> openai <span class="kw">import</span> OpenAI
+
+client = <span class="fn">OpenAI</span>(
+    base_url=<span class="str">"http://localhost:8080/v1"</span>,
+    api_key=<span class="str">"your-key"</span>
+)
+
+response = client.chat.completions.<span class="fn">create</span>(
+    model=<span class="str">"picolm-local"</span>,
+    messages=[{
+        <span class="str">"role"</span>: <span class="str">"user"</span>,
+        <span class="str">"content"</span>: <span class="str">"Hello!"</span>
+    }]
+)
+
+<span class="fn">print</span>(response.choices[<span class="num">0</span>].message.content)</pre>
+        </div>
+        <div class="code-panel" id="tab-node">
+          <button class="copy-btn" onclick="copyCode('node')">copy</button>
+          <pre><span class="kw">import</span> OpenAI <span class="kw">from</span> <span class="str">'openai'</span>;
+
+<span class="kw">const</span> <span class="var">client</span> = <span class="kw">new</span> <span class="fn">OpenAI</span>({
+  baseURL: <span class="str">'http://localhost:8080/v1'</span>,
+  apiKey: <span class="str">'your-key'</span>
+});
+
+<span class="kw">const</span> <span class="var">response</span> = <span class="kw">await</span> client.chat.completions.<span class="fn">create</span>({
+  model: <span class="str">'picolm-local'</span>,
+  messages: [{
+    role: <span class="str">'user'</span>,
+    content: <span class="str">'Hello!'</span>
+  }]
+});
+
+console.<span class="fn">log</span>(<span class="var">response</span>.choices[<span class="num">0</span>].message.content);</pre>
+        </div>
+        <div class="code-panel" id="tab-go">
+          <button class="copy-btn" onclick="copyCode('go')">copy</button>
+          <pre><span class="kw">package</span> main
+
+<span class="kw">import</span> (
+    <span class="str">"context"</span>
+    <span class="str">"fmt"</span>
+    openai <span class="str">"github.com/sashabaranov/go-openai"</span>
+)
+
+<span class="kw">func</span> <span class="fn">main</span>() {
+    cfg := openai.<span class="fn">DefaultConfig</span>(<span class="str">"your-key"</span>)
+    cfg.BaseURL = <span class="str">"http://localhost:8080/v1"</span>
+    client := openai.<span class="fn">NewClientWithConfig</span>(cfg)
+
+    resp, _ := client.<span class="fn">CreateChatCompletion</span>(
+        context.<span class="fn">Background</span>(),
+        openai.ChatCompletionRequest{
+            Model: <span class="str">"picolm-local"</span>,
+            Messages: []openai.ChatCompletionMessage{
+                {Role: openai.ChatMessageRoleUser,
+                 Content: <span class="str">"Hello!"</span>},
+            },
+        },
+    )
+    fmt.<span class="fn">Println</span>(resp.Choices[<span class="num">0</span>].Message.Content)
+}</pre>
+        </div>
+        <div class="code-panel" id="tab-curl">
+          <button class="copy-btn" onclick="copyCode('curl')">copy</button>
+          <pre>curl -X POST <span class="str">http://localhost:8080/v1/chat/completions</span> \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -H <span class="str">"Authorization: Bearer your-key"</span> \
+  -d <span class="str">'{
+    "model": "picolm-local",
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ],
+    "stream": true,
+    "temperature": 0.7
+  }'</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPATIBLE MODELS -->
+<div class="compat-section">
+  <div class="compat-inner">
+    <div class="section-label fade-in">Compatible Models</div>
+    <h2 class="section-title fade-in">Runs any ChatML model.</h2>
+    <p class="section-desc fade-in">Load any GGUF-formatted model that supports ChatML format. From tiny to large — if PicoLM can run it, PicoLM Server can serve it.</p>
+
+    <div class="compat-grid fade-in">
+      <div class="compat-item">
+        <span class="compat-icon">🦙</span>
+        <div class="compat-name">TinyLlama</div>
+      </div>
+      <div class="compat-item">
+        <span class="compat-icon">φ</span>
+        <div class="compat-name">Phi-2</div>
+      </div>
+      <div class="compat-item">
+        <span class="compat-icon">千</span>
+        <div class="compat-name">Qwen</div>
+      </div>
+      <div class="compat-item">
+        <span class="compat-icon">📦</span>
+        <div class="compat-name">GGUF Models</div>
+      </div>
+      <div class="compat-item">
+        <span class="compat-icon">💬</span>
+        <div class="compat-name">ChatML Format</div>
+      </div>
+      <div class="compat-item">
+        <span class="compat-icon">➕</span>
+        <div class="compat-name">More Soon</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- QUICK START -->
+<div class="quickstart-section" id="quickstart">
+  <div class="quickstart-inner">
+    <div class="section-label fade-in">Quick Start</div>
+    <h2 class="section-title fade-in">Up in under<br>a minute.</h2>
+    <p class="section-desc fade-in">Three steps. One config file. You're running local inference.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-content">
+          <h3>Clone & Build</h3>
+          <p>Grab the source and compile the server binary with Go.</p>
+          <div class="inline-code">
+            <span>git clone https://github.com/wmik/picolm-server.git && go build ./cmd/server/</span>
+            <button class="inline-copy" onclick="copyText('git clone https://github.com/wmik/picolm-server.git && go build ./cmd/server/')" title="Copy">⎘</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-content">
+          <h3>Configure</h3>
+          <p>Copy the example config and point it at your PicoLM binary and GGUF model file.</p>
+          <div class="inline-code">
+            <span>cp config.example.yaml config.yaml  # then edit paths</span>
+            <button class="inline-copy" onclick="copyText('cp config.example.yaml config.yaml')" title="Copy">⎘</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-content">
+          <h3>Run</h3>
+          <p>Launch the server. Your OpenAI-compatible endpoint is live at <code style="color:var(--accent);font-family:var(--font-mono)">localhost:8080</code>.</p>
+          <div class="inline-code">
+            <span>./picolm-server -config config.yaml</span>
+            <button class="inline-copy" onclick="copyText('./picolm-server -config config.yaml')" title="Copy">⎘</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">🐳</div>
+        <div class="step-content">
+          <h3>Or with Docker</h3>
+          <p>Prefer containers? One command and you're done.</p>
+          <div class="inline-code">
+            <span>docker-compose up -d</span>
+            <button class="inline-copy" onclick="copyText('docker-compose up -d')" title="Copy">⎘</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">picolm-server</div>
+    <div class="footer-links">
+      <a href="https://github.com/wmik/picolm-server" class="footer-link" target="_blank">GitHub</a>
+      <a href="https://github.com/wmik/picolm-server/blob/main/README.md" class="footer-link" target="_blank">Docs</a>
+      <a href="https://github.com/wmik/picolm-server/blob/main/CONTRIBUTING.md" class="footer-link" target="_blank">Contributing</a>
+      <a href="https://github.com/wmik/picolm-server/blob/main/LICENSE" class="footer-link" target="_blank">MIT License</a>
+      <a href="https://github.com/RightNow-AI/picolm" class="footer-link" target="_blank">PicoLM Engine</a>
+    </div>
+    <div class="footer-copy">Built on PicoLM — an ultra-lightweight LLM inference engine.</div>
+  </div>
+</footer>
+
+<script>
+  // ── THEME TOGGLE ──
+  function toggleTheme() {
+    const html = document.documentElement;
+    const btn = document.querySelector('.theme-toggle');
+    if (html.dataset.theme === 'dark') {
+      html.dataset.theme = 'light';
+      btn.textContent = '🌙';
+    } else {
+      html.dataset.theme = 'dark';
+      btn.textContent = '☀️';
+    }
+  }
+
+  // ── CODE TABS ──
+  function switchTab(name, el) {
+    document.querySelectorAll('.code-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    el.classList.add('active');
+  }
+
+  // ── COPY HELPERS ──
+  const codeSources = {
+    python: `from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:8080/v1",
+    api_key="your-key"
+)
+
+response = client.chat.completions.create(
+    model="picolm-local",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+
+print(response.choices[0].message.content)`,
+    node: `import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: 'http://localhost:8080/v1',
+  apiKey: 'your-key'
+});
+
+const response = await client.chat.completions.create({
+  model: 'picolm-local',
+  messages: [{role: 'user', content: 'Hello!'}]
+});
+
+console.log(response.choices[0].message.content);`,
+    go: `package main
+
+import (
+    "context"
+    "fmt"
+    openai "github.com/sashabaranov/go-openai"
+)
+
+func main() {
+    cfg := openai.DefaultConfig("your-key")
+    cfg.BaseURL = "http://localhost:8080/v1"
+    client := openai.NewClientWithConfig(cfg)
+
+    resp, _ := client.CreateChatCompletion(
+        context.Background(),
+        openai.ChatCompletionRequest{
+            Model: "picolm-local",
+            Messages: []openai.ChatCompletionMessage{
+                {Role: openai.ChatMessageRoleUser, Content: "Hello!"},
+            },
+        },
+    )
+    fmt.Println(resp.Choices[0].Message.Content)
+}`,
+    curl: `curl -X POST http://localhost:8080/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer your-key" \\
+  -d '{
+    "model": "picolm-local",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": true,
+    "temperature": 0.7
+  }'`
+  };
+
+  function copyCode(lang) {
+    copyText(codeSources[lang]);
+    const btn = document.querySelector('#tab-' + lang + ' .copy-btn');
+    if (btn) { btn.textContent = 'copied!'; setTimeout(() => btn.textContent = 'copy', 2000); }
+  }
+
+  function copyText(text) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+
+  // ── SCROLL ANIMATIONS ──
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.fade-in, .step').forEach(el => observer.observe(el));
+
+  // ── STAGGERED STEP DELAYS ──
+  document.querySelectorAll('.step').forEach((step, i) => {
+    step.style.transitionDelay = `${i * 0.12}s`;
+  });
+</script>
+</body>
+</html>
