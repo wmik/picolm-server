@@ -1,0 +1,34 @@
+# Binaries
+picolm-server
+*.exe
+
+# Config (local overrides)
+config.yaml
+
+# Go
+vendor/
+*.test
+coverage.out
+go.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# GitHub
+.github/
+
+# Documentation
+CONTRIBUTING.md
+README*
+LICENSE

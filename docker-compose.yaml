@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  picolm-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - MODEL_URL=${MODEL_URL:-}
+        - MODEL_NAME=${MODEL_NAME:-model.gguf}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./models:/models:ro
+    environment:
+      - PICOCLAW_GATEWAY_HOST=0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
