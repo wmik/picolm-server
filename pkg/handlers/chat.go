@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -196,16 +197,24 @@ func (h *Handler) HandleModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	modelIDs := h.client.GetModelIDs()
+	models := make([]types.Model, len(modelIDs))
+	for i, id := range modelIDs {
+		_, created, err := h.client.GetModelInfo(id)
+		if err != nil {
+			created = 1704067200
+		}
+		models[i] = types.Model{
+			ID:      id,
+			Object:  "model",
+			Created: int(created),
+			OwnedBy: "picolm",
+		}
+	}
+
 	response := types.ModelList{
 		Object: "list",
-		Data: []types.Model{
-			{
-				ID:      "picolm-local",
-				Object:  "model",
-				Created: 1704067200,
-				OwnedBy: "picolm",
-			},
-		},
+		Data:   models,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -225,15 +234,23 @@ func (h *Handler) HandleModelInfo(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path, "/")
 	modelID := parts[len(parts)-1]
 
-	if modelID != "picolm-local" {
+	modelIDs := h.client.GetModelIDs()
+	found := slices.Contains(modelIDs, modelID)
+
+	if !found {
 		http.Error(w, "model not found", http.StatusNotFound)
 		return
 	}
 
+	_, created, err := h.client.GetModelInfo(modelID)
+	if err != nil {
+		created = 1704067200
+	}
+
 	response := types.Model{
-		ID:      "picolm-local",
+		ID:      modelID,
 		Object:  "model",
-		Created: 1704067200,
+		Created: int(created),
 		OwnedBy: "picolm",
 	}
 
