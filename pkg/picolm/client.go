@@ -29,6 +29,8 @@ type Provider interface {
 	Chat(ctx context.Context, req *types.ChatCompletionRequest) (*ChatResult, error)
 	StreamChat(ctx context.Context, req *types.ChatCompletionRequest, handler StreamHandler) error
 	GetDefaultModel() string
+	GetModelIDs() []string
+	GetModelInfo(modelName string) (string, int64, error)
 	Validate() error
 }
 
@@ -45,8 +47,15 @@ func (c *Client) Chat(ctx context.Context, req *types.ChatCompletionRequest) (*C
 	if c.config.Binary == "" {
 		return nil, fmt.Errorf("picolm binary not configured")
 	}
-	if c.config.ModelPath == "" {
-		return nil, fmt.Errorf("picolm model path not configured")
+
+	modelName := req.Model
+	if modelName == "" {
+		modelName, _ = c.config.GetDefaultModel()
+	}
+
+	modelPath, err := c.config.GetModelPath(modelName)
+	if err != nil {
+		return nil, fmt.Errorf("model not configured: %s", modelName)
 	}
 
 	prompt := c.buildPrompt(req.Messages, req.Tools)
@@ -67,7 +76,7 @@ func (c *Client) Chat(ctx context.Context, req *types.ChatCompletionRequest) (*C
 	}
 
 	args := []string{
-		c.config.ModelPath,
+		modelPath,
 		"-n", fmt.Sprintf("%d", maxTokens),
 		"-j", fmt.Sprintf("%d", c.config.Threads),
 		"-t", fmt.Sprintf("%.1f", temperature),
@@ -90,7 +99,7 @@ func (c *Client) Chat(ctx context.Context, req *types.ChatCompletionRequest) (*C
 	cmd.Stderr = &stderr
 
 	startTime := time.Now()
-	err := cmd.Run()
+	err = cmd.Run()
 	elapsed := time.Since(startTime)
 
 	if inferenceCtx.Err() == context.DeadlineExceeded {
@@ -149,8 +158,15 @@ func (c *Client) StreamChat(ctx context.Context, req *types.ChatCompletionReques
 	if c.config.Binary == "" {
 		return fmt.Errorf("picolm binary not configured")
 	}
-	if c.config.ModelPath == "" {
-		return fmt.Errorf("picolm model path not configured")
+
+	modelName := req.Model
+	if modelName == "" {
+		modelName, _ = c.config.GetDefaultModel()
+	}
+
+	modelPath, err := c.config.GetModelPath(modelName)
+	if err != nil {
+		return fmt.Errorf("model not configured: %s", modelName)
 	}
 
 	prompt := c.buildPrompt(req.Messages, req.Tools)
@@ -171,7 +187,7 @@ func (c *Client) StreamChat(ctx context.Context, req *types.ChatCompletionReques
 	}
 
 	args := []string{
-		c.config.ModelPath,
+		modelPath,
 		"-n", fmt.Sprintf("%d", maxTokens),
 		"-j", fmt.Sprintf("%d", c.config.Threads),
 		"-t", fmt.Sprintf("%.1f", temperature),
@@ -466,16 +482,18 @@ func (c *Client) Validate() error {
 		return fmt.Errorf("binary %q is not executable", c.config.Binary)
 	}
 
-	if c.config.ModelPath == "" {
-		return fmt.Errorf("model path is required")
+	if len(c.config.Models) == 0 {
+		return fmt.Errorf("at least one model must be configured")
 	}
 
-	info, err = os.Stat(c.config.ModelPath)
-	if err != nil {
-		return fmt.Errorf("model not found at %q: %w", c.config.ModelPath, err)
-	}
-	if info.IsDir() {
-		return fmt.Errorf("model path %q is a directory", c.config.ModelPath)
+	for name, path := range c.config.Models {
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("model %q not found at %q: %w", name, path, err)
+		}
+		if info.IsDir() {
+			return fmt.Errorf("model path %q for %q is a directory", path, name)
+		}
 	}
 
 	return nil
@@ -500,5 +518,18 @@ func (c *Client) calculateTimeout(maxTokens int) time.Duration {
 }
 
 func (c *Client) GetDefaultModel() string {
-	return "picolm-local"
+	name, _ := c.config.GetDefaultModel()
+	return name
+}
+
+func (c *Client) GetModelIDs() []string {
+	ids := make([]string, 0, len(c.config.Models))
+	for id := range c.config.Models {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func (c *Client) GetModelInfo(modelName string) (string, int64, error) {
+	return c.config.GetModelInfo(modelName)
 }

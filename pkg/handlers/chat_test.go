@@ -33,6 +33,14 @@ func (m *mockPicoLMClient) GetDefaultModel() string {
 	return "picolm-local"
 }
 
+func (m *mockPicoLMClient) GetModelIDs() []string {
+	return []string{"picolm-local"}
+}
+
+func (m *mockPicoLMClient) GetModelInfo(modelName string) (string, int64, error) {
+	return "/path/to/model.gguf", 1704067200, nil
+}
+
 func (m *mockPicoLMClient) Validate() error {
 	return nil
 }

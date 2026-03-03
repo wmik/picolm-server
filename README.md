@@ -52,7 +52,8 @@ server:
 
 picolm:
   binary: "/path/to/picolm"           # Path to picolm binary
-  model_path: "/path/to/model.gguf"    # Path to GGUF model
+  models:
+    local: "/path/to/model.gguf"      # Model name -> Path to GGUF model
   max_tokens: 256
   threads: 4
   temperature: 0.7
@@ -260,7 +261,8 @@ server:
 
 picolm:
   binary: "/usr/local/bin/picolm"
-  model_path: "/models/model.gguf"
+  models:
+    local: "/models/model.gguf"
   timeout_seconds: 300
   max_tokens: 256
   threads: 4

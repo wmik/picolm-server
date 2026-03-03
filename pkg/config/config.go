@@ -30,18 +30,21 @@ type LoggingConfig struct {
 }
 
 type PicoLMConfig struct {
-	Binary         string  `yaml:"binary"`
-	ModelPath      string  `yaml:"model_path"`
-	TimeoutSeconds int     `yaml:"timeout_seconds"`
-	MaxTokens      int     `yaml:"max_tokens"`
-	Threads        int     `yaml:"threads"`
-	Temperature    float64 `yaml:"temperature"`
-	TopP           float64 `yaml:"top_p"`
-	ContextLength  int     `yaml:"context_length"`
-	CacheDir       string  `yaml:"cache_dir"`
+	Binary         string            `yaml:"binary"`
+	Models         map[string]string `yaml:"models"`
+	TimeoutSeconds int               `yaml:"timeout_seconds"`
+	MaxTokens      int               `yaml:"max_tokens"`
+	Threads        int               `yaml:"threads"`
+	Temperature    float64           `yaml:"temperature"`
+	TopP           float64           `yaml:"top_p"`
+	ContextLength  int               `yaml:"context_length"`
+	CacheDir       string            `yaml:"cache_dir"`
 }
 
 func (p *PicoLMConfig) SetDefaults() {
+	if p.Models == nil {
+		p.Models = make(map[string]string)
+	}
 	if p.MaxTokens == 0 {
 		p.MaxTokens = 256
 	}
@@ -59,6 +62,38 @@ func (p *PicoLMConfig) SetDefaults() {
 	}
 }
 
+func (p *PicoLMConfig) GetModelPath(modelName string) (string, error) {
+	path, ok := p.Models[modelName]
+	if !ok {
+		return "", fmt.Errorf("model %q not found", modelName)
+	}
+	return path, nil
+}
+
+func (p *PicoLMConfig) GetDefaultModel() (string, error) {
+	if len(p.Models) == 0 {
+		return "", fmt.Errorf("no models configured")
+	}
+	for name := range p.Models {
+		return name, nil
+	}
+	return "", fmt.Errorf("no models configured")
+}
+
+func (p *PicoLMConfig) GetModelInfo(modelName string) (string, int64, error) {
+	path, ok := p.Models[modelName]
+	if !ok {
+		return "", 0, fmt.Errorf("model %q not found", modelName)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return path, info.ModTime().Unix(), nil
+}
+
 func (p *PicoLMConfig) Validate() error {
 	if p.Temperature < 0 || p.Temperature > 1 {
 		return fmt.Errorf("temperature must be between 0 and 1, got %f", p.Temperature)
@@ -71,6 +106,9 @@ func (p *PicoLMConfig) Validate() error {
 	}
 	if p.Threads <= 0 {
 		return fmt.Errorf("threads must be positive, got %d", p.Threads)
+	}
+	if len(p.Models) == 0 {
+		return fmt.Errorf("at least one model must be configured")
 	}
 	return nil
 }
@@ -122,7 +160,9 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.PicoLM.Binary = expandHome(cfg.PicoLM.Binary)
-	cfg.PicoLM.ModelPath = expandHome(cfg.PicoLM.ModelPath)
+	for name, path := range cfg.PicoLM.Models {
+		cfg.PicoLM.Models[name] = expandHome(path)
+	}
 	cfg.PicoLM.CacheDir = expandHome(cfg.PicoLM.CacheDir)
 
 	return &cfg, nil
