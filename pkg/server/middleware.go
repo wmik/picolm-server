@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/picolm/picolm-server/pkg/config"
+	"github.com/wmik/picolm-server/pkg/config"
 )
 
 type loggingMiddleware struct {
@@ -95,7 +97,7 @@ func (m *loggingMiddleware) log(entry LogEntry) {
 }
 
 func (m *loggingMiddleware) writeToFile(output string) {
-	dir := m.config.FilePath[:strings.LastIndex(m.config.FilePath, "/")]
+	dir := filepath.Dir(m.config.FilePath)
 	if dir != "" {
 		os.MkdirAll(dir, 0755)
 	}
@@ -115,7 +117,7 @@ func (m *loggingMiddleware) shouldLog(status int) bool {
 	case "debug":
 		return true
 	case "info":
-		return status >= 200 && status < 400
+		return status >= 200
 	case "warn":
 		return status >= 400
 	case "error":
@@ -175,7 +177,14 @@ func getClientIP(r *http.Request) string {
 		parts := strings.Split(forwarded, ",")
 		return strings.TrimSpace(parts[0])
 	}
-	return r.RemoteAddr[:strings.LastIndex(r.RemoteAddr, ":")]
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+
+	if err != nil {
+		return r.RemoteAddr
+	}
+
+	return host
 }
 
 func withRequestID(ctx context.Context, id string) context.Context {
