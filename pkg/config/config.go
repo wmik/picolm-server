@@ -95,8 +95,8 @@ func (p *PicoLMConfig) GetModelInfo(modelName string) (string, int64, error) {
 }
 
 func (p *PicoLMConfig) Validate() error {
-	if p.Temperature < 0 || p.Temperature > 1 {
-		return fmt.Errorf("temperature must be between 0 and 1, got %f", p.Temperature)
+	if p.Temperature < 0 || p.Temperature > 2 {
+		return fmt.Errorf("temperature must be between 0 and 2, got %f", p.Temperature)
 	}
 	if p.TopP < 0 || p.TopP > 1 {
 		return fmt.Errorf("top_p must be between 0 and 1, got %f", p.TopP)
@@ -134,9 +134,6 @@ func (l *LoggingConfig) SetDefaults() {
 	}
 	if l.FilePath == "" {
 		l.FilePath = "logs/server.log"
-	}
-	if !l.LogRequests {
-		l.LogRequests = true
 	}
 }
 
