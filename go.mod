@@ -1,4 +1,4 @@
-module github.com/picolm/picolm-server
+module github.com/wmik/picolm-server
 
 go 1.21
 

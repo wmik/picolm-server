@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/picolm/picolm-server/pkg/picolm"
-	"github.com/picolm/picolm-server/pkg/types"
+	"github.com/wmik/picolm-server/pkg/picolm"
+	"github.com/wmik/picolm-server/pkg/types"
 )
 
 type mockPicoLMClient struct {
