@@ -45,7 +45,7 @@ func main() {
 
 	var srv http.Handler = mux
 
-	if cfg.Logging.LogRequests {
+	if cfg.Logging.Enabled {
 		srv = server.NewLoggingMiddleware(srv, cfg.Logging)
 		log.Printf("Logging enabled: format=%s level=%s output=%s",
 			cfg.Logging.Format, cfg.Logging.Level, cfg.Logging.Output)

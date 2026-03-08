@@ -16,9 +16,8 @@ picolm:
   cache_dir: "/tmp/picolm-cache"
 
 logging:
+  enabled: false       # Set to true to enable request logging
   level: "info"        # debug, info, warn, error
   format: "text"       # json, text
   output: "stdout"     # stdout, file
   file_path: "logs/server.log"
-  log_requests: true
-  log_responses: false

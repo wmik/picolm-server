@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -12,21 +13,46 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wmik/picolm-server/pkg/config"
 )
 
 type loggingMiddleware struct {
-	handler http.Handler
-	config  config.LoggingConfig
+	handler  http.Handler
+	config   config.LoggingConfig
+	fileOnce sync.Once
+	file     *os.File
+	writer   *bufio.Writer
 }
 
 func NewLoggingMiddleware(handler http.Handler, cfg config.LoggingConfig) http.Handler {
-	return &loggingMiddleware{
+	m := &loggingMiddleware{
 		handler: handler,
 		config:  cfg,
 	}
+	if cfg.Output == "file" {
+		m.initFile()
+	}
+	return m
+}
+
+func (m *loggingMiddleware) initFile() {
+	m.fileOnce.Do(func() {
+		dir := filepath.Dir(m.config.FilePath)
+		if dir != "." && dir != "" {
+			os.MkdirAll(dir, 0755)
+		}
+
+		f, err := os.OpenFile(m.config.FilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Printf("failed to open log file: %v", err)
+			return
+		}
+		m.file = f
+		m.writer = bufio.NewWriter(f)
+	})
 }
 
 func (m *loggingMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -97,19 +123,15 @@ func (m *loggingMiddleware) log(entry LogEntry) {
 }
 
 func (m *loggingMiddleware) writeToFile(output string) {
-	dir := filepath.Dir(m.config.FilePath)
-	if dir != "" {
-		os.MkdirAll(dir, 0755)
+	if m.writer == nil {
+		m.initFile()
 	}
-
-	f, err := os.OpenFile(m.config.FilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Printf("failed to open log file: %v", err)
+	if m.writer == nil {
 		return
 	}
-	defer f.Close()
 
-	fmt.Fprintln(f, output)
+	fmt.Fprintln(m.writer, output)
+	m.writer.Flush()
 }
 
 func (m *loggingMiddleware) shouldLog(status int) bool {
@@ -167,7 +189,9 @@ const requestIDKey contextKey = "requestID"
 
 func generateRequestID() string {
 	b := make([]byte, 12)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+	}
 	return base64.URLEncoding.EncodeToString(b)[:12]
 }
 
