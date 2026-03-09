@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -150,7 +149,7 @@ func (c *Client) Chat(ctx context.Context, req *types.ChatCompletionRequest) (*C
 		TotalTokens:      (len(prompt) + len(output)) / 4,
 	}
 
-	log.Printf("inference completed in %v", elapsed)
+	_ = elapsed
 
 	return &ChatResult{
 		Content:      strings.TrimSpace(content),
