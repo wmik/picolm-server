@@ -6,19 +6,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	// "log"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/picolm/picolm-server/pkg/config"
-	"github.com/picolm/picolm-server/pkg/types"
+	"github.com/wmik/picolm-server/pkg/config"
+	"github.com/wmik/picolm-server/pkg/types"
 )
 
 type Client struct {
 	config config.PicoLMConfig
+	mux    sync.Mutex
 }
 
 func NewClient(cfg config.PicoLMConfig) *Client {
@@ -44,6 +45,9 @@ type ChatResult struct {
 }
 
 func (c *Client) Chat(ctx context.Context, req *types.ChatCompletionRequest) (*ChatResult, error) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
 	if c.config.Binary == "" {
 		return nil, fmt.Errorf("picolm binary not configured")
 	}
@@ -75,12 +79,15 @@ func (c *Client) Chat(ctx context.Context, req *types.ChatCompletionRequest) (*C
 		topP = req.TopP
 	}
 
+	contextLength := c.config.ContextLength
+
 	args := []string{
 		modelPath,
 		"-n", fmt.Sprintf("%d", maxTokens),
 		"-j", fmt.Sprintf("%d", c.config.Threads),
 		"-t", fmt.Sprintf("%.1f", temperature),
 		"-k", fmt.Sprintf("%.1f", topP),
+		"-c", fmt.Sprintf("%d", contextLength),
 	}
 
 	if len(req.Tools) > 0 {
@@ -155,6 +162,9 @@ func (c *Client) Chat(ctx context.Context, req *types.ChatCompletionRequest) (*C
 type StreamHandler func(content string, finishReason string) error
 
 func (c *Client) StreamChat(ctx context.Context, req *types.ChatCompletionRequest, handler StreamHandler) error {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
 	if c.config.Binary == "" {
 		return fmt.Errorf("picolm binary not configured")
 	}
@@ -186,12 +196,15 @@ func (c *Client) StreamChat(ctx context.Context, req *types.ChatCompletionReques
 		topP = req.TopP
 	}
 
+	contextLength := c.config.ContextLength
+
 	args := []string{
 		modelPath,
 		"-n", fmt.Sprintf("%d", maxTokens),
 		"-j", fmt.Sprintf("%d", c.config.Threads),
 		"-t", fmt.Sprintf("%.1f", temperature),
 		"-k", fmt.Sprintf("%.1f", topP),
+		"-c", fmt.Sprintf("%d", contextLength),
 	}
 
 	if len(req.Tools) > 0 {
@@ -234,11 +247,13 @@ func (c *Client) StreamChat(ctx context.Context, req *types.ChatCompletionReques
 		return fmt.Errorf("failed to start picolm: %w", err)
 	}
 
-	scanner := bufio.NewScanner(stdout)
+	reader := bufio.NewReader(stdout)
 	var output strings.Builder
+	var tokenBuf strings.Builder
 	finishReason := "stop"
 
-	for scanner.Scan() {
+outer:
+	for {
 		select {
 		case <-inferenceCtx.Done():
 			cmd.Process.Kill()
@@ -249,26 +264,35 @@ func (c *Client) StreamChat(ctx context.Context, req *types.ChatCompletionReques
 		default:
 		}
 
-		token := scanner.Text()
+		b, readErr := reader.ReadByte()
 
-		if containsSpecialToken(token) {
-			break
+		if readErr != nil {
+			if readErr != io.EOF {
+				cmd.Process.Kill()
+			}
+
+			if rem := tokenBuf.String(); rem != "" && !containsSpecialToken(rem) {
+				output.WriteString(rem)
+				handler(rem, "") //nolint:errcheck
+			}
+			break outer
 		}
 
-		output.WriteString(token)
+		if b == ' ' || b == '\n' || b == '\t' {
+			token := tokenBuf.String()
+			tokenBuf.Reset()
 
-		if err := handler(token, ""); err != nil {
-			cmd.Process.Kill()
-			return err
-		}
-	}
+			if containsSpecialToken(token) {
+				break outer
+			}
 
-	if err := scanner.Err(); err != nil {
-		cmd.Process.Kill()
-		if stderrBuf.Len() > 0 {
-			return fmt.Errorf("picolm error: %s", stderrBuf.String())
+			output.WriteString(token)
+
+			if err := handler(token, ""); err != nil {
+				cmd.Process.Kill()
+				return err
+			}
 		}
-		return fmt.Errorf("error reading stdout: %w", err)
 	}
 
 	wg.Wait()
@@ -434,7 +458,7 @@ func (c *Client) stripToolCalls(text string) string {
 }
 
 func (c *Client) cleanResponse(output string) string {
-	specialTokens := []string{"<|user|>", "<|assistant|>", "</s>"}
+	specialTokens := []string{"<|user|>", "<|assistant|>", "</s>", "<|system|>", "<|end|>"}
 
 	minIdx := len(output)
 	for _, token := range specialTokens {
@@ -446,12 +470,6 @@ func (c *Client) cleanResponse(output string) string {
 	if minIdx < len(output) {
 		output = output[:minIdx]
 	}
-
-	output = strings.ReplaceAll(output, "<|user|>", "")
-	output = strings.ReplaceAll(output, "<|assistant|>", "")
-	output = strings.ReplaceAll(output, "</s>", "")
-	output = strings.ReplaceAll(output, "<|system|>", "")
-	output = strings.ReplaceAll(output, "<|end|>", "")
 
 	return strings.TrimSpace(output)
 }

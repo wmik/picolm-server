@@ -9,13 +9,19 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/picolm/picolm-server/pkg/picolm"
-	"github.com/picolm/picolm-server/pkg/types"
+	"github.com/wmik/picolm-server/pkg/picolm"
+	"github.com/wmik/picolm-server/pkg/types"
 )
 
 type mockPicoLMClient struct {
-	response *picolm.ChatResult
-	err      error
+	response         *picolm.ChatResult
+	err              error
+	streamTokens     []string
+	streamErr        error
+	streamHandler    picolm.StreamHandler
+	modelInfoPath    string
+	modelInfoCreated int64
+	modelInfoErr     error
 }
 
 func (m *mockPicoLMClient) Chat(ctx context.Context, req *types.ChatCompletionRequest) (*picolm.ChatResult, error) {
@@ -26,7 +32,18 @@ func (m *mockPicoLMClient) Chat(ctx context.Context, req *types.ChatCompletionRe
 }
 
 func (m *mockPicoLMClient) StreamChat(ctx context.Context, req *types.ChatCompletionRequest, handler picolm.StreamHandler) error {
-	return nil
+	if m.streamErr != nil {
+		return m.streamErr
+	}
+	if m.streamHandler != nil {
+		return m.streamHandler("", "")
+	}
+	for _, token := range m.streamTokens {
+		if err := handler(token, ""); err != nil {
+			return err
+		}
+	}
+	return handler("", "stop")
 }
 
 func (m *mockPicoLMClient) GetDefaultModel() string {
@@ -38,7 +55,18 @@ func (m *mockPicoLMClient) GetModelIDs() []string {
 }
 
 func (m *mockPicoLMClient) GetModelInfo(modelName string) (string, int64, error) {
-	return "/path/to/model.gguf", 1704067200, nil
+	if m.modelInfoErr != nil {
+		return "", 0, m.modelInfoErr
+	}
+	path := m.modelInfoPath
+	if path == "" {
+		path = "/path/to/model.gguf"
+	}
+	created := m.modelInfoCreated
+	if created == 0 {
+		created = 1704067200
+	}
+	return path, created, nil
 }
 
 func (m *mockPicoLMClient) Validate() error {

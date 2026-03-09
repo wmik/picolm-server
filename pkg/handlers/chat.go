@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -11,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/picolm/picolm-server/pkg/picolm"
-	"github.com/picolm/picolm-server/pkg/types"
+	"github.com/wmik/picolm-server/pkg/picolm"
+	"github.com/wmik/picolm-server/pkg/types"
 )
 
 type Handler struct {
@@ -44,7 +45,7 @@ func (h *Handler) requireAuth(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	token := strings.TrimPrefix(auth, "Bearer ")
-	if token != h.apiKey {
+	if subtle.ConstantTimeCompare([]byte(token), []byte(h.apiKey)) != 1 {
 		http.Error(w, "invalid api key", http.StatusUnauthorized)
 		return false
 	}
@@ -167,20 +168,15 @@ func (h *Handler) handleStreamingChat(w http.ResponseWriter, r *http.Request, re
 	if err != nil {
 		log.Printf("picolm streaming error: %v", err)
 
-		errStr := err.Error()
-		isTimeout := strings.Contains(errStr, "timeout") || strings.Contains(errStr, "cancelled") || strings.Contains(errStr, "disconnected")
-
 		errData, _ := json.Marshal(map[string]interface{}{
 			"error": map[string]string{
-				"message": errStr,
+				"message": err.Error(),
 				"type":    "internal_error",
 			},
 		})
 		fmt.Fprintf(w, "data: %s\n\n", errData)
-
-		if isTimeout {
-			w.WriteHeader(http.StatusGatewayTimeout)
-		}
+		flusher.Flush()
+		return
 	}
 
 	fmt.Fprintf(w, "data: [DONE]\n\n")

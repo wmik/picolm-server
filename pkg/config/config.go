@@ -21,12 +21,11 @@ type ServerConfig struct {
 }
 
 type LoggingConfig struct {
-	Level        string `yaml:"level"`
-	Format       string `yaml:"format"`
-	Output       string `yaml:"output"`
-	FilePath     string `yaml:"file_path"`
-	LogRequests  bool   `yaml:"log_requests"`
-	LogResponses bool   `yaml:"log_responses"`
+	Enabled  bool   `yaml:"enabled"`
+	Level    string `yaml:"level"`
+	Format   string `yaml:"format"`
+	Output   string `yaml:"output"`
+	FilePath string `yaml:"file_path"`
 }
 
 type PicoLMConfig struct {
@@ -95,8 +94,8 @@ func (p *PicoLMConfig) GetModelInfo(modelName string) (string, int64, error) {
 }
 
 func (p *PicoLMConfig) Validate() error {
-	if p.Temperature < 0 || p.Temperature > 1 {
-		return fmt.Errorf("temperature must be between 0 and 1, got %f", p.Temperature)
+	if p.Temperature < 0 || p.Temperature > 2 {
+		return fmt.Errorf("temperature must be between 0 and 2, got %f", p.Temperature)
 	}
 	if p.TopP < 0 || p.TopP > 1 {
 		return fmt.Errorf("top_p must be between 0 and 1, got %f", p.TopP)
@@ -123,6 +122,9 @@ func (s *ServerConfig) SetDefaults() {
 }
 
 func (l *LoggingConfig) SetDefaults() {
+	if !l.Enabled {
+		l.Enabled = false
+	}
 	if l.Level == "" {
 		l.Level = "info"
 	}
@@ -134,9 +136,6 @@ func (l *LoggingConfig) SetDefaults() {
 	}
 	if l.FilePath == "" {
 		l.FilePath = "logs/server.log"
-	}
-	if !l.LogRequests {
-		l.LogRequests = true
 	}
 }
 
@@ -154,6 +153,8 @@ func Load(path string) (*Config, error) {
 	cfg.Server.SetDefaults()
 	cfg.PicoLM.SetDefaults()
 	cfg.Logging.SetDefaults()
+
+	cfg.applyEnvOverrides()
 
 	if err := cfg.PicoLM.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid picolm config: %w", err)
@@ -180,4 +181,10 @@ func expandHome(path string) string {
 		return filepath.Join(home, path[1:])
 	}
 	return home
+}
+
+func (c *Config) applyEnvOverrides() {
+	if v := os.Getenv("PICOLM_SERVER_API_KEY"); v != "" {
+		c.Server.APIKey = v
+	}
 }

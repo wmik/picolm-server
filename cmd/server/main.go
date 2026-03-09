@@ -1,15 +1,20 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/picolm/picolm-server/pkg/config"
-	"github.com/picolm/picolm-server/pkg/handlers"
-	"github.com/picolm/picolm-server/pkg/picolm"
-	"github.com/picolm/picolm-server/pkg/server"
+	"github.com/wmik/picolm-server/pkg/config"
+	"github.com/wmik/picolm-server/pkg/handlers"
+	"github.com/wmik/picolm-server/pkg/picolm"
+	"github.com/wmik/picolm-server/pkg/server"
 )
 
 func main() {
@@ -40,7 +45,7 @@ func main() {
 
 	var srv http.Handler = mux
 
-	if cfg.Logging.LogRequests {
+	if cfg.Logging.Enabled {
 		srv = server.NewLoggingMiddleware(srv, cfg.Logging)
 		log.Printf("Logging enabled: format=%s level=%s output=%s",
 			cfg.Logging.Format, cfg.Logging.Level, cfg.Logging.Output)
@@ -54,7 +59,23 @@ func main() {
 	log.Printf("  GET  /v1/models/{model_id}")
 	log.Printf("  GET  /health")
 
-	if err := http.ListenAndServe(addr, srv); err != nil {
-		log.Fatalf("server error: %v", err)
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           srv,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
+
+	go func() {
+		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Printf("Shutting down...")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	httpServer.Shutdown(ctx)
 }
