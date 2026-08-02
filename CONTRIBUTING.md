@@ -205,6 +205,49 @@ picolm-server/
 - Ensure all checks pass (`go build`, `go vet`, `gofmt`)
 - Request code review from maintainers
 
+## Releasing
+
+Releases are automated via GitHub Actions using [GoReleaser](https://goreleaser.com). Pushing a semantic version tag (without a `v` prefix) triggers the release workflow.
+
+### Creating a Release
+
+1. **Ensure `main` is up to date and CI is green**
+
+   ```bash
+   git checkout main
+   git pull
+   ```
+
+2. **Tag the release with a semantic version** (e.g. `1.2.3`)
+
+   ```bash
+   git tag 1.2.3
+   git push origin 1.2.3
+   ```
+
+3. **Wait for the `Release` workflow to finish.** It runs tests, then builds and publishes:
+
+   - Binaries for `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, and `windows/amd64` (`.exe`, zipped)
+   - `checksums.txt` for artifact verification
+   - Release notes auto-generated from commits since the previous tag
+
+4. **Verify the release** on the [Releases page](https://github.com/wmik/picolm-server/releases).
+
+### Local Snapshot Build
+
+To verify the release artifacts locally without publishing:
+
+```bash
+make snapshot
+```
+
+Artifacts are written to `dist/` (gitignored).
+
+### Notes
+
+- The release only ships the server binary. The [PicoLM](https://github.com/RightNow-AI/picolm) C binary must be built separately for each target platform (on Windows, use `picolm.exe`).
+- Pre-release tags (e.g. `1.2.3-rc1`) are not matched by the current workflow pattern. Extend the pattern in `.github/workflows/release.yml` if needed.
+
 ## Getting Help
 
 - Check existing issues for similar problems

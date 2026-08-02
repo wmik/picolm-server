@@ -27,14 +27,14 @@ PicoLM Server exposes [PicoLM](https://github.com/RightNow-AI/picolm/) functiona
 #### From Source
 
 ```bash
-git clone https://github.com/picolm/picolm-server.git
+git clone https://github.com/wmik/picolm-server.git
 cd picolm-server
 go build -o picolm-server ./cmd/server/
 ```
 
 #### From Release
 
-Download the latest binary from [Releases](https://github.com/picolm/picolm-server/releases)
+Download the latest binary from [Releases](https://github.com/wmik/picolm-server/releases)
 
 ### Configuration
 
