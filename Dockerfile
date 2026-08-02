@@ -18,14 +18,14 @@ RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o picolm-server ./cmd/server/
 
 RUN git clone --depth 1 https://github.com/RightNow-AI/picolm.git /tmp/picolm && \
-    cd /tmp/picolm && \
+    cd /tmp/picolm/picolm && \
     echo "Building picolm for $TARGETARCH" && \
     if [ "$TARGETARCH" = "arm64" ]; then \
-        gcc -O3 -march=armv8-a picolm.c -o picolm -lm; \
+        make pi; \
     elif [ "$TARGETARCH" = "arm" ]; then \
-        gcc -O3 -march=armv7-a picolm.c -o picolm -lm; \
+        make pi-arm32; \
     else \
-        gcc -O3 -march=native picolm.c -o picolm -lm; \
+        make native; \
     fi
 
 RUN mkdir -p /models && \
