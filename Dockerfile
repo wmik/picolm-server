@@ -13,6 +13,8 @@ ARG TARGETARCH
 ARG MODEL_URL
 ARG MODEL_NAME=model.gguf
 
+RUN go mod tidy
+
 RUN CGO_ENABLED=0 GOOS=linux go build -o picolm-server ./cmd/server/
 
 RUN git clone --depth 1 https://github.com/RightNow-AI/picolm.git /tmp/picolm && \
