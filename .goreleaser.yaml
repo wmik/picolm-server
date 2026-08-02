@@ -1,0 +1,55 @@
+version: 2
+
+project_name: picolm-server
+
+builds:
+  - id: picolm-server
+    main: ./cmd/server
+    binary: picolm-server
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+      - config.example.yaml
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([^)]+\))?[!:]'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([^)]+\))?[!:]'
+      order: 1
+    - title: Others
+      order: 999
+
+release:
+  name_template: "picolm-server {{ .Version }}"
+  mode: keep-existing

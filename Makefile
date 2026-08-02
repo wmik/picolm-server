@@ -1,4 +1,4 @@
-.PHONY: build run test clean docker-build docker-run lint vet fmt
+.PHONY: build run test clean docker-build docker-run lint vet fmt release snapshot
 
 BINARY=picolm-server
 CONFIG=config.yaml
@@ -24,6 +24,12 @@ lint: vet fmt
 
 clean:
 	rm -f $(BINARY)
+
+release:
+	goreleaser release --clean
+
+snapshot:
+	goreleaser release --snapshot --clean
 
 docker-build:
 	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .

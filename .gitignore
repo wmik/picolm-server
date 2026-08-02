@@ -13,6 +13,9 @@ vendor/
 *.test
 coverage.out
 
+# GoReleaser
+dist/
+
 # IDE
 .idea/
 .vscode/

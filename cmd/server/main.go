@@ -17,6 +17,12 @@ import (
 	"github.com/wmik/picolm-server/pkg/server"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
@@ -25,6 +31,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+
+	log.Printf("picolm-server version %s (commit %s, built %s)", version, commit, date)
 
 	client := picolm.NewClient(cfg.PicoLM)
 
